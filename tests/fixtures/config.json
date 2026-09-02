@@ -1,0 +1,25 @@
+{
+  "extensible": true,
+  "extensionTrait": "crate::extensions",
+  "classes": {
+    "Person": {
+      "propertyOverrides": {
+        "age": "Option<u32>"
+      },
+      "propertyDefaults": {
+        "tags": []
+      },
+      "propertySkipIf": {
+        "version": "0"
+      },
+      "extraFields": [
+        {
+          "name": "source_uri",
+          "rustType": "Option<String>",
+          "doc": "Origin URI when decoded from a file.",
+          "skipSerde": true
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Address",
+  "type": "object",
+  "description": "A postal address.",
+  "properties": {
+    "street": { "type": "string", "description": "Street line." },
+    "city": { "type": "string", "description": "City name." }
+  }
+}

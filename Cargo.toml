@@ -1,0 +1,30 @@
+[package]
+name = "schemagen"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/calebbuffa/schemagen"
+description = "Generate Rust types from JSON Schema with configurable customization"
+
+[lib]
+name = "schemagen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "schemagen"
+path = "src/bin/schemagen.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+heck = "0.5"
+percent-encoding = "2"
+prettyplease = "0.2"
+proc-macro2 = "1"
+quote = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+syn = { version = "2", features = ["full", "parsing"] }
+
+[dev-dependencies]
+tempfile = "3"

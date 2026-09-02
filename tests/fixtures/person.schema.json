@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Person",
+  "type": "object",
+  "description": "A test person.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Full name."
+    },
+    "age": {
+      "type": "integer",
+      "description": "Age in years."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Arbitrary tags."
+    },
+    "home": {
+      "$ref": "address.schema.json",
+      "description": "Primary residence."
+    },
+    "mood": {
+      "type": "string",
+      "enum": ["happy", "sad", "meh"],
+      "description": "Current mood."
+    },
+    "version": {
+      "type": "integer",
+      "description": "Schema version."
+    }
+  },
+  "required": ["name"]
+}
