@@ -11,8 +11,9 @@
 //! - [`loader`]: JSON -> `SchemaNode` conversion
 //! - [`graph`]: schema document discovery and `$ref` resolution across files
 //! - [`types`]: schema -> Rust type resolution (M3)
-//! - [`config`]: data-driven overrides (M4)
-//! - [`policy`]: spec-specific customization trait (M4)
+//! - [`settings`]: how schema primitives map onto Rust types
+//! - [`config`]: data-driven per-schema exceptions (M4)
+//! - [`policy`]: consumer-defined generation rules (M4)
 //! - [`render`]: syn/quote/prettyplease rendering (M5)
 //!
 pub mod config;
@@ -23,12 +24,14 @@ pub mod loader;
 pub mod pointer;
 pub mod policy;
 pub mod render;
+pub mod settings;
 pub mod types;
 
 pub use config::Config;
 pub use graph::{Graph, SchemaId};
-pub use policy::{DefaultPolicy, GenerationPolicy};
-pub use render::render_module;
+pub use policy::{DefaultPolicy, GenerationPolicy, SettingsPolicy};
+pub use render::{render_module, render_modules};
+pub use settings::{FloatWidth, IntegerWidth, MapRepr, StringRepr, TypeSettings};
 pub use types::{
     EnumDef, EnumVariantDef, RustType, StructDef, UnionDef, UnionVariantDef, generate_types,
     generate_types_from_roots,

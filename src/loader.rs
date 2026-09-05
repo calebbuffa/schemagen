@@ -153,7 +153,8 @@ fn convert_at(value: &Value, file: &str, pointer: &str, sink: &mut Sink) -> Sche
             }
             parsed
         });
-    let schema = SchemaNode {
+
+    SchemaNode {
         location: location.clone(),
         metadata,
         reference,
@@ -167,8 +168,7 @@ fn convert_at(value: &Value, file: &str, pointer: &str, sink: &mut Sink) -> Sche
         const_value: object.get("const").cloned(),
         bool_true: false,
         bool_false: false,
-    };
-    schema
+    }
 }
 
 fn child(base: &str, key: &str) -> String {

@@ -28,56 +28,6 @@ pub struct Graph {
     sink: Sink,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::loader;
-
-    #[test]
-    fn resolves_definition_pointer_against_raw_document() {
-        let raw = serde_json::json!({
-            "definitions": { "Thing": { "type": "string" } }
-        });
-        let mut sink = Sink::new();
-        let selected = Pointer::parse("#/definitions/Thing")
-            .unwrap()
-            .resolve(&raw)
-            .unwrap();
-        let node = loader::convert(selected, "memory.json", &mut sink);
-        assert_eq!(node.types.only(), Some("string"));
-        assert!(!sink.has_errors());
-    }
-
-    #[test]
-    fn loads_json_schemas_from_a_nested_directory() {
-        let temp = tempfile::tempdir().unwrap();
-        std::fs::create_dir(temp.path().join("nested")).unwrap();
-        std::fs::write(temp.path().join("one.schema.json"), r#"{"type":"object"}"#).unwrap();
-        std::fs::write(
-            temp.path().join("nested/two.schema.json"),
-            r#"{"type":"object"}"#,
-        )
-        .unwrap();
-        std::fs::write(temp.path().join("nested/readme.txt"), "not a schema").unwrap();
-
-        let mut graph = Graph::new(temp.path());
-        let documents = graph.load_tree(".").unwrap();
-
-        assert_eq!(documents.len(), 2);
-    }
-
-    #[test]
-    fn load_reports_missing_schema() {
-        let temp = tempfile::tempdir().unwrap();
-        let mut graph = Graph::new(temp.path());
-
-        let error = graph.load("missing.schema.json").unwrap_err();
-
-        assert!(error.contains("schema not found"));
-        assert!(error.contains("missing.schema.json"));
-    }
-}
-
 impl Graph {
     pub fn new(root_dir: impl Into<PathBuf>) -> Self {
         Self {
@@ -222,23 +172,24 @@ impl Graph {
                 .iter()
                 .map(|directory| directory.join(&lookup_name)),
         );
-        if path.is_absolute() {
-            if let Ok(relative) = path.strip_prefix(&self.root_dir) {
-                let components: Vec<_> = relative.components().collect();
-                for skip in 1..=2 {
-                    if components.len() > skip {
-                        let relative = components[skip..]
+        if path.is_absolute()
+            && let Ok(relative) = path.strip_prefix(&self.root_dir)
+        {
+            let components: Vec<_> = relative.components().collect();
+            for skip in 1..=2 {
+                if components.len() > skip {
+                    let relative =
+                        components[skip..]
                             .iter()
                             .fold(PathBuf::new(), |mut path, component| {
                                 path.push(component.as_os_str());
                                 path
                             });
-                        candidates.extend(
-                            self.search_dirs
-                                .iter()
-                                .map(|directory| directory.join(&relative)),
-                        );
-                    }
+                    candidates.extend(
+                        self.search_dirs
+                            .iter()
+                            .map(|directory| directory.join(&relative)),
+                    );
                 }
             }
         }
@@ -311,3 +262,53 @@ fn count_titles(value: &Value, title: &str) -> usize {
 
 #[allow(dead_code)]
 fn _pointer_type_is_used(_: &Pointer) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::loader;
+
+    #[test]
+    fn resolves_definition_pointer_against_raw_document() {
+        let raw = serde_json::json!({
+            "definitions": { "Thing": { "type": "string" } }
+        });
+        let mut sink = Sink::new();
+        let selected = Pointer::parse("#/definitions/Thing")
+            .unwrap()
+            .resolve(&raw)
+            .unwrap();
+        let node = loader::convert(selected, "memory.json", &mut sink);
+        assert_eq!(node.types.only(), Some("string"));
+        assert!(!sink.has_errors());
+    }
+
+    #[test]
+    fn loads_json_schemas_from_a_nested_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(temp.path().join("nested")).unwrap();
+        std::fs::write(temp.path().join("one.schema.json"), r#"{"type":"object"}"#).unwrap();
+        std::fs::write(
+            temp.path().join("nested/two.schema.json"),
+            r#"{"type":"object"}"#,
+        )
+        .unwrap();
+        std::fs::write(temp.path().join("nested/readme.txt"), "not a schema").unwrap();
+
+        let mut graph = Graph::new(temp.path());
+        let documents = graph.load_tree(".").unwrap();
+
+        assert_eq!(documents.len(), 2);
+    }
+
+    #[test]
+    fn load_reports_missing_schema() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut graph = Graph::new(temp.path());
+
+        let error = graph.load("missing.schema.json").unwrap_err();
+
+        assert!(error.contains("schema not found"));
+        assert!(error.contains("missing.schema.json"));
+    }
+}
