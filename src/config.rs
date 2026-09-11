@@ -4,8 +4,8 @@
 //! that no general rule predicts, such as one schema whose Rust name must be
 //! spelled differently or one property whose type the schema understates.
 //!
-//! Anything that is a rule rather than an exception — how primitives map onto
-//! Rust types, how names are derived, which schemas to emit — belongs in
+//! Anything that is a rule rather than an exception - how primitives map onto
+//! Rust types, how names are derived, which schemas to emit - belongs in
 //! [`GenerationPolicy`] instead, where it is type-checked. See that module's
 //! documentation for the reasoning.
 //!

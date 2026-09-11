@@ -9,7 +9,7 @@
 //! These choices are expressed as an enumeration per decision rather than as
 //! free-form strings, so an unsupported value is a compile error at the call
 //! site instead of a silent fallback to the default. Settings are supplied
-//! programmatically through [`GenerationPolicy::settings`] — see the module
+//! programmatically through [`GenerationPolicy::settings`] - see the module
 //! documentation on [`crate::policy`] for why they live there and not in the
 //! data-driven [`Config`].
 //!
@@ -22,7 +22,7 @@ use crate::types::RustType;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FloatWidth {
     /// Single precision. Appropriate when the schema's values are
-    /// semantically 32-bit — vertex positions, colour factors, and so on —
+    /// semantically 32-bit - vertex positions, colour factors, and so on -
     /// which would otherwise require a per-property override on every one.
     Single,
     /// Double precision, matching JSON's own number model.
@@ -73,7 +73,7 @@ impl IntegerWidth {
 
 /// The Rust type that schema `string` properties map to.
 ///
-/// Map *keys* are unaffected by this choice — they stay `String` so that
+/// Map *keys* are unaffected by this choice - they stay `String` so that
 /// serde's map key handling and `Borrow<str>` lookups continue to work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StringRepr {
