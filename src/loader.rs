@@ -58,7 +58,9 @@ pub fn convert(value: &Value, file: &str, sink: &mut Sink) -> SchemaNode {
     convert_at(value, file, "", sink)
 }
 
-fn convert_at(value: &Value, file: &str, pointer: &str, sink: &mut Sink) -> SchemaNode {
+/// Converts the fragment of `file` found at `pointer`, so that every
+/// [`Location`] inside the result is addressed from the document root.
+pub fn convert_at(value: &Value, file: &str, pointer: &str, sink: &mut Sink) -> SchemaNode {
     let location = if pointer.is_empty() {
         Location::new(file)
     } else {
@@ -304,12 +306,14 @@ fn array_constraints(
 }
 
 fn number_constraints(object: &serde_json::Map<String, Value>) -> Option<NumberConstraints> {
-    let mut result = NumberConstraints::default();
-    result.minimum = object.get("minimum").and_then(Value::as_f64);
-    result.maximum = object.get("maximum").and_then(Value::as_f64);
-    result.exclusive_minimum = object.get("exclusiveMinimum").and_then(Value::as_f64);
-    result.exclusive_maximum = object.get("exclusiveMaximum").and_then(Value::as_f64);
-    result.multiple_of = object.get("multipleOf").and_then(Value::as_f64);
+    let number = |key: &str| object.get(key).and_then(Value::as_f64);
+    let result = NumberConstraints {
+        minimum: number("minimum"),
+        maximum: number("maximum"),
+        exclusive_minimum: number("exclusiveMinimum"),
+        exclusive_maximum: number("exclusiveMaximum"),
+        multiple_of: number("multipleOf"),
+    };
     if result.minimum.is_none()
         && result.maximum.is_none()
         && result.exclusive_minimum.is_none()
@@ -323,23 +327,19 @@ fn number_constraints(object: &serde_json::Map<String, Value>) -> Option<NumberC
 }
 
 fn string_constraints(object: &serde_json::Map<String, Value>) -> Option<StringConstraints> {
-    let mut result = StringConstraints::default();
-    result.min_length = object
-        .get("minLength")
-        .and_then(Value::as_u64)
-        .map(|n| n as u32);
-    result.max_length = object
-        .get("maxLength")
-        .and_then(Value::as_u64)
-        .map(|n| n as u32);
-    result.pattern = object
-        .get("pattern")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    result.format = object
-        .get("format")
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let length = |key: &str| {
+        object
+            .get(key)
+            .and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok())
+    };
+    let text = |key: &str| object.get(key).and_then(Value::as_str).map(str::to_string);
+    let result = StringConstraints {
+        min_length: length("minLength"),
+        max_length: length("maxLength"),
+        pattern: text("pattern"),
+        format: text("format"),
+    };
     if result.min_length.is_none()
         && result.max_length.is_none()
         && result.pattern.is_none()
@@ -388,33 +388,22 @@ fn combinators(
 }
 
 fn metadata(object: &serde_json::Map<String, Value>) -> Metadata {
-    let mut result = Metadata::default();
-    result.title = object
-        .get("title")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    result.description = object
-        .get("description")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    result.default = object.get("default").cloned();
-    result.examples = object
-        .get("examples")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    result.deprecated = object
-        .get("deprecated")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    result.read_only = object
-        .get("readOnly")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    result.write_only = object
-        .get("writeOnly")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let text = |key: &str| object.get(key).and_then(Value::as_str).map(str::to_string);
+    let flag = |key: &str| object.get(key).and_then(Value::as_bool).unwrap_or(false);
+    let mut result = Metadata {
+        title: text("title"),
+        description: text("description"),
+        default: object.get("default").cloned(),
+        examples: object
+            .get("examples")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+        deprecated: flag("deprecated"),
+        read_only: flag("readOnly"),
+        write_only: flag("writeOnly"),
+        ..Metadata::default()
+    };
     for (key, value) in object {
         if !KNOWN.contains(&key.as_str()) {
             result.extensions.insert(key.clone(), value.clone());

@@ -64,6 +64,16 @@ impl Pointer {
         Some(Self { tokens })
     }
 
+    /// The pointer as it appears in a [`Location`](crate::diagnostics::Location):
+    /// empty for the document root, otherwise `/`-separated and RFC 6901
+    /// escaped.
+    pub fn fragment(&self) -> String {
+        self.tokens
+            .iter()
+            .map(|token| format!("/{}", token.0.replace('~', "~0").replace('/', "~1")))
+            .collect()
+    }
+
     pub fn resolve<'a>(&self, root: &'a serde_json::Value) -> Option<&'a serde_json::Value> {
         let mut current = root;
         for token in &self.tokens {

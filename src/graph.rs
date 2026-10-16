@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::diagnostics::Sink;
+use crate::error::Error;
 use crate::ir::{RefTarget, SchemaNode};
 use crate::loader;
 use crate::pointer::Pointer;
@@ -58,13 +59,10 @@ impl Graph {
         self.files.is_empty()
     }
 
-    pub fn load(&mut self, relative: &str) -> Result<SchemaId, String> {
-        self.load_path(self.root_dir.join(relative)).ok_or_else(|| {
-            format!(
-                "schema not found: {}",
-                self.root_dir.join(relative).display()
-            )
-        })
+    pub fn load(&mut self, relative: &str) -> Result<SchemaId, Error> {
+        let path = self.root_dir.join(relative);
+        self.load_path(path.clone())
+            .ok_or(Error::SchemaNotFound(path))
     }
 
     /// Loads every JSON Schema document below a consumer-selected directory.
@@ -137,6 +135,16 @@ impl Graph {
     }
 
     pub fn resolve(&mut self, source: &SchemaId, target: &RefTarget) -> Option<SchemaNode> {
+        self.resolve_node(source, target).map(|(_, node)| node)
+    }
+
+    /// Resolves `target` and also returns the document it was found in, which
+    /// the referenced node's own `$ref`s must be resolved against.
+    pub fn resolve_node(
+        &mut self,
+        source: &SchemaId,
+        target: &RefTarget,
+    ) -> Option<(SchemaId, SchemaNode)> {
         let file = if target.file.is_empty() {
             source.file.clone()
         } else {
@@ -147,11 +155,13 @@ impl Graph {
         let id = self.load_path(file)?;
         let value = self.files.get(&id.file)?.clone();
         let selected = target.pointer.resolve(&value)?.clone();
-        Some(loader::convert(
+        let node = loader::convert_at(
             &selected,
             &id.file.to_string_lossy(),
+            &target.pointer.fragment(),
             &mut self.sink,
-        ))
+        );
+        Some((id, node))
     }
 
     fn load_path(&mut self, path: PathBuf) -> Option<SchemaId> {
@@ -306,7 +316,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let mut graph = Graph::new(temp.path());
 
-        let error = graph.load("missing.schema.json").unwrap_err();
+        let error = graph.load("missing.schema.json").unwrap_err().to_string();
 
         assert!(error.contains("schema not found"));
         assert!(error.contains("missing.schema.json"));

@@ -8,7 +8,9 @@ pub enum Level {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Where in a schema document something was found. The pair identifies a
+/// schema node uniquely, so it doubles as the node's identity.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Location {
     pub file: PathBuf,
     pub pointer: Option<String>,
@@ -37,7 +39,7 @@ impl std::fmt::Display for Location {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub level: Level,
     pub location: Location,
@@ -70,21 +72,23 @@ impl std::fmt::Display for Diagnostic {
     }
 }
 
+/// Collects diagnostics, ignoring exact repeats.
+///
+/// A schema node can be visited many times (once per `$ref` to it), and each
+/// visit would otherwise report the same problem again.
 #[derive(Debug, Default)]
 pub struct Sink {
     diagnostics: Vec<Diagnostic>,
-    allow_lossy: bool,
 }
 
 impl Sink {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn allow_lossy(&mut self, lossy: bool) {
-        self.allow_lossy = lossy;
-    }
     pub fn report(&mut self, diagnostic: Diagnostic) {
-        self.diagnostics.push(diagnostic);
+        if !self.diagnostics.contains(&diagnostic) {
+            self.diagnostics.push(diagnostic);
+        }
     }
     pub fn warn(&mut self, location: Location, message: impl Into<String>) {
         self.report(Diagnostic::warning(location, message));
@@ -96,7 +100,15 @@ impl Sink {
         &self.diagnostics
     }
     pub fn has_errors(&self) -> bool {
-        !self.allow_lossy && self.diagnostics.iter().any(|d| d.level == Level::Error)
+        self.diagnostics.iter().any(|d| d.level == Level::Error)
+    }
+    /// Every error reported so far.
+    pub fn errors(&self) -> Vec<Diagnostic> {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.level == Level::Error)
+            .cloned()
+            .collect()
     }
     pub fn has_warnings(&self) -> bool {
         self.diagnostics.iter().any(|d| d.level == Level::Warning)
@@ -116,10 +128,12 @@ mod tests {
     }
 
     #[test]
-    fn lossy_mode_suppresses_errors() {
+    fn repeated_diagnostics_are_recorded_once() {
         let mut sink = Sink::new();
-        sink.allow_lossy(true);
-        sink.error(Location::new("a.json"), "bad");
-        assert!(!sink.has_errors());
+        for _ in 0..3 {
+            sink.error(Location::new("a.json"), "bad");
+        }
+        assert_eq!(sink.diagnostics().len(), 1);
+        assert_eq!(sink.errors().len(), 1);
     }
 }

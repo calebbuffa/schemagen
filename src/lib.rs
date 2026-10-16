@@ -1,38 +1,42 @@
 //! # schemagen
 //!
-//! Generate Rust types from JSON Schema files with configurable
-//! customization. The crate is being redesigned as a general-purpose
-//! Draft-07 generator; see the module docs for the layered architecture.
+//! Generates Rust types from JSON Schema (Draft-07) documents.
 //!
-//! Layers:
-//! - [`pointer`]: RFC 6901 JSON Pointer
-//! - [`diagnostics`]: structured error/warning reporting
-//! - [`ir`]: normalized `SchemaNode` IR (preserves all Draft-07 fields)
-//! - [`loader`]: JSON -> `SchemaNode` conversion
-//! - [`graph`]: schema document discovery and `$ref` resolution across files
-//! - [`types`]: schema -> Rust type resolution (M3)
-//! - [`settings`]: how schema primitives map onto Rust types
-//! - [`config`]: data-driven per-schema exceptions (M4)
-//! - [`policy`]: consumer-defined generation rules (M4)
-//! - [`render`]: syn/quote/prettyplease rendering (M5)
+//! Generation is a pipeline, one module per stage:
 //!
+//! 1. [`loader`] and [`graph`] read schema documents into a normalised
+//!    [`ir`] and resolve `$ref`s across files.
+//! 2. [`resolve`] turns that into a typed [`model`] of structs, enums and
+//!    unions, consulting the [`Config`] (data) and a [`GenerationPolicy`]
+//!    (rules) for every decision a schema alone cannot make.
+//! 3. [`render`] turns the model into Rust source.
+//! 4. [`driver`] (the `cli` feature) wraps all of it as a command line.
+//!
+//! Every stage reports through [`diagnostics`] rather than failing on the
+//! first problem, and everything that can fail returns [`Error`].
+
 pub mod config;
 pub mod diagnostics;
+#[cfg(feature = "cli")]
+pub mod driver;
+pub mod error;
 pub mod graph;
 pub mod ir;
 pub mod loader;
+pub mod model;
 pub mod pointer;
 pub mod policy;
 pub mod render;
+pub mod resolve;
 pub mod settings;
-pub mod types;
 
 pub use config::Config;
+pub use error::{Error, Result};
 pub use graph::{Graph, SchemaId};
-pub use policy::{DefaultPolicy, GenerationPolicy, SettingsPolicy};
-pub use render::{render_module, render_modules};
-pub use settings::{FloatWidth, IntegerWidth, MapRepr, StringRepr, TypeSettings};
-pub use types::{
-    EnumDef, EnumVariantDef, RustType, StructDef, UnionDef, UnionVariantDef, generate_types,
-    generate_types_from_roots,
+pub use model::{
+    EnumDef, EnumVariantDef, Generated, RustType, StructDef, UnionDef, UnionVariantDef,
 };
+pub use policy::{DefaultPolicy, GenerationPolicy, SettingsPolicy};
+pub use render::{Module, format_tokens, render_module, render_modules};
+pub use resolve::{ConfigUsage, generate};
+pub use settings::{FloatWidth, IntegerWidth, MapRepr, StringRepr, TypeSettings};

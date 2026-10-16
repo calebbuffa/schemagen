@@ -1,6 +1,6 @@
 [package]
 name = "schemagen"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/calebbuffa/schemagen"
@@ -13,10 +13,15 @@ path = "src/lib.rs"
 [[bin]]
 name = "schemagen"
 path = "src/bin/schemagen.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+# The command-line driver, reusable by consumers' build tooling.
+cli = ["dep:clap"]
 
 [dependencies]
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive"], optional = true }
 heck = "0.5"
 percent-encoding = "2"
 prettyplease = "0.2"
@@ -24,7 +29,8 @@ proc-macro2 = "1"
 quote = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-syn = { version = "2", features = ["full", "parsing"] }
+syn = { version = "2", features = ["full", "parsing", "extra-traits"] }
+thiserror = "2"
 
 [dev-dependencies]
 tempfile = "3"

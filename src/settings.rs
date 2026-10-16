@@ -16,7 +16,7 @@
 //! [`GenerationPolicy::settings`]: crate::policy::GenerationPolicy::settings
 //! [`Config`]: crate::config::Config
 
-use crate::types::RustType;
+use crate::model::RustType;
 
 /// The Rust type that schema `number` properties map to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -138,9 +138,8 @@ pub struct TypeSettings {
     /// Schemas commonly write `anyOf: [{const: 5121}, ..., {type: "integer"}]`
     /// to keep a property extensible. By default that fallback wins and the
     /// property becomes a bare primitive, forcing every consumer to re-derive
-    /// the value mapping by hand. Enable this to model the closed variants
-    /// instead. Values outside the set then become deserialization errors, so
-    /// it suits a schema whose extensibility is nominal.
+    /// the value mapping by hand. Enable this to model the named values
+    /// instead, as an open enum that still round-trips values outside the set.
     pub infer_open_enums: bool,
 }
 
