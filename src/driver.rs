@@ -19,7 +19,7 @@ use crate::resolve::{ConfigUsage, generate};
 /// The options every schemagen command line shares.
 #[derive(clap::Args, Debug, Clone)]
 pub struct Args {
-    /// A schema file, or a directory searched recursively for schemas.
+    /// A schema file, or a directory searched recursively for `*.schema.json`.
     /// Repeatable.
     #[arg(long = "schema", required = true)]
     pub schemas: Vec<PathBuf>,

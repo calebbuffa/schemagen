@@ -65,7 +65,9 @@ impl Graph {
             .ok_or(Error::SchemaNotFound(path))
     }
 
-    /// Loads every JSON Schema document below a consumer-selected directory.
+    /// Loads every `*.schema.json` document below a consumer-selected
+    /// directory. Other JSON files, such as examples, are not schemas and are
+    /// ignored.
     ///
     /// The caller controls which discovered documents are generation roots.
     pub fn load_tree(&mut self, relative: impl AsRef<Path>) -> std::io::Result<Vec<SchemaId>> {
@@ -247,8 +249,9 @@ fn collect_json_files(directory: &Path, paths: &mut Vec<PathBuf>) -> std::io::Re
         if path.is_dir() {
             collect_json_files(&path, paths)?;
         } else if path
-            .extension()
-            .is_some_and(|extension| extension == "json")
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".schema.json"))
         {
             paths.push(path);
         }
@@ -304,6 +307,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(temp.path().join("nested/readme.txt"), "not a schema").unwrap();
+        std::fs::write(temp.path().join("nested/example.json"), "{ not json, }").unwrap();
 
         let mut graph = Graph::new(temp.path());
         let documents = graph.load_tree(".").unwrap();
