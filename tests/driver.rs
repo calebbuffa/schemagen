@@ -84,7 +84,7 @@ fn check_never_writes() {
 fn deny_warnings_turns_stale_config_into_failure() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config.json");
-    std::fs::write(&config, r#"{"classes":{"Nothing":{"skip":true}}}"#).unwrap();
+    std::fs::write(&config, r#"{"schemas":{"Nothing":{"skip":true}}}"#).unwrap();
     let output = dir.path().join("generated.rs");
     let mut args = args(&output, Some(&config));
     run(&args, &DefaultPolicy).expect("a stale entry is only a warning");

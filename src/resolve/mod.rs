@@ -26,7 +26,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use heck::ToUpperCamelCase;
 
-use crate::config::{ClassConfig, Config, TypeNaming};
+use crate::config::{Config, SchemaConfig, TypeNaming};
 use crate::diagnostics::{Location, Sink};
 use crate::error::{Error, Result};
 use crate::graph::{Graph, SchemaId};
@@ -43,7 +43,7 @@ use names::{check_ident, file_stem, upper_camel};
 /// reporting, since each module sees only its own schemas.
 #[derive(Debug, Clone, Default)]
 pub struct ConfigUsage {
-    classes: BTreeSet<String>,
+    schemas: BTreeSet<String>,
     field_types: BTreeSet<String>,
     enum_names: BTreeSet<String>,
     enum_aliases: BTreeSet<String>,
@@ -52,7 +52,7 @@ pub struct ConfigUsage {
 impl ConfigUsage {
     /// Folds another run's usage into this one.
     pub fn merge(&mut self, other: &ConfigUsage) {
-        self.classes.extend(other.classes.iter().cloned());
+        self.schemas.extend(other.schemas.iter().cloned());
         self.field_types.extend(other.field_types.iter().cloned());
         self.enum_names.extend(other.enum_names.iter().cloned());
         self.enum_aliases.extend(other.enum_aliases.iter().cloned());
@@ -61,7 +61,7 @@ impl ConfigUsage {
     /// Warns about every `config` entry that was never consulted.
     pub fn report_unused(&self, config: &Config, sink: &mut Sink) {
         let sections: [(&str, Vec<&String>, &BTreeSet<String>); 4] = [
-            ("classes", config.classes.keys().collect(), &self.classes),
+            ("schemas", config.schemas.keys().collect(), &self.schemas),
             (
                 "fieldTypes",
                 config.field_types.keys().collect(),
@@ -173,16 +173,17 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         }
     }
 
-    /// The class configured for `label`, recording that it was consulted.
-    fn class(&mut self, label: &str) -> Option<ClassConfig> {
-        let (key, class) = self.config.class(label)?;
-        self.used.classes.insert(key.to_string());
-        Some(class.clone())
+    /// The overrides configured for the schema labelled `label`, recording
+    /// that they were consulted.
+    fn schema_config(&mut self, label: &str) -> Option<SchemaConfig> {
+        let (key, schema) = self.config.schema(label)?;
+        self.used.schemas.insert(key.to_string());
+        Some(schema.clone())
     }
 
     /// The Rust name of the type generated for `node`.
     ///
-    /// Precedence: the policy, then the class's `overrideName`, then the
+    /// Precedence: the policy, then the schema's `overrideName`, then the
     /// configured naming scheme.
     fn type_name(&mut self, node: &SchemaNode) -> String {
         let label = self.label(node);
@@ -197,7 +198,10 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         if let Some(name) = self.policy.type_name(label, node) {
             return name;
         }
-        if let Some(name) = self.class(label).and_then(|class| class.override_name) {
+        if let Some(name) = self
+            .schema_config(label)
+            .and_then(|schema| schema.override_name)
+        {
             return name;
         }
         let stem = upper_camel(&file_stem(&node.location));
@@ -231,7 +235,10 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
                 continue;
             }
             let label = self.label(&node);
-            if self.class(&label).is_some_and(|class| class.is_skipped()) {
+            if self
+                .schema_config(&label)
+                .is_some_and(|schema| schema.is_skipped())
+            {
                 continue;
             }
             if !self.policy.should_generate(&label, &node) {
@@ -297,19 +304,19 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
             definition.alias = None;
             definition.unions.push(union);
         }
-        self.apply_class(node, &mut definition);
+        self.apply_schema_config(node, &mut definition);
         if definition.is_object {
             self.policy.augment_struct(&mut definition);
         }
         definition
     }
 
-    /// Adds the members the class declares beyond the schema's own.
-    fn apply_class(&mut self, node: &SchemaNode, definition: &mut StructDef) {
-        let Some(class) = self.class(&self.label(node)) else {
+    /// Adds the members the configuration declares beyond the schema's own.
+    fn apply_schema_config(&mut self, node: &SchemaNode, definition: &mut StructDef) {
+        let Some(overrides) = self.schema_config(&self.label(node)) else {
             return;
         };
-        for extra in &class.extra_fields {
+        for extra in &overrides.extra_fields {
             if definition.fields.iter().any(|f| f.rust_name == extra.name)
                 || definition.extra_fields.iter().any(|f| f.name == extra.name)
             {
@@ -353,7 +360,12 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         let names = output
             .iter()
             .flat_map(|definition| {
-                std::iter::once(definition.name.as_str())
+                // A root union renders as its union only; the definition
+                // that carries it emits no item of its own.
+                let renders = definition.is_object || definition.alias.is_some();
+                renders
+                    .then_some(definition.name.as_str())
+                    .into_iter()
                     .chain(definition.enums.iter().map(|e| e.name.as_str()))
                     .chain(definition.unions.iter().map(|u| u.name.as_str()))
             })

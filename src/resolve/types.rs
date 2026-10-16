@@ -116,11 +116,11 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
     /// the schema's own structure when it is an untitled non-object.
     pub(super) fn reference_type(&mut self, target: &SchemaId, resolved: &SchemaNode) -> RustType {
         let label = self.label(resolved);
-        if let Some(class) = self.class(&label) {
-            if let Some(replacement) = &class.replace_with {
+        if let Some(schema) = self.schema_config(&label) {
+            if let Some(replacement) = &schema.replace_with {
                 return replacement.clone();
             }
-            if class.skip {
+            if schema.skip {
                 return RustType::Value;
             }
         }

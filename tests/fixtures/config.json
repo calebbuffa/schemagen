@@ -1,6 +1,6 @@
 {
   "extensible": true,
-  "classes": {
+  "schemas": {
     "Person": {
       "propertyTypes": {
         "age": "Option<u32>"

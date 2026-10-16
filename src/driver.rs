@@ -209,11 +209,17 @@ pub fn emit(path: &Path, text: &str, check: bool) -> Result<()> {
     std::fs::write(path, text).map_err(|e| Error::io(path, e))
 }
 
-/// Runs the whole single-module pipeline for `args` under `policy`.
+/// Runs the whole single-module pipeline for `args` under `policy`, reading
+/// the config named by `args` (or none).
 pub fn run(args: &Args, policy: &dyn GenerationPolicy) -> Result<()> {
-    let config = load_config(args)?;
-    let mut loaded = Source::from(args).load(&config)?;
-    let generated = generate(&mut loaded.graph, &loaded.roots, &config, policy);
+    run_with(args, &load_config(args)?, policy)
+}
+
+/// Runs the whole single-module pipeline with a config built in code, such as
+/// by [`Config::builder`]. `args.config` is ignored.
+pub fn run_with(args: &Args, config: &Config, policy: &dyn GenerationPolicy) -> Result<()> {
+    let mut loaded = Source::from(args).load(config)?;
+    let generated = generate(&mut loaded.graph, &loaded.roots, config, policy);
     let (generated, usage) = match generated {
         Ok(result) => result,
         Err(error) => {
@@ -229,10 +235,10 @@ pub fn run(args: &Args, policy: &dyn GenerationPolicy) -> Result<()> {
     };
     let mut merged = ConfigUsage::default();
     merged.merge(&usage);
-    merged.report_unused(&config, loaded.graph.sink_mut());
+    merged.report_unused(config, loaded.graph.sink_mut());
     finish(loaded.graph.sink(), args.deny_warnings)?;
 
-    let source = render_module(&args.module_doc, &generated, &config, policy)?;
+    let source = render_module(&args.module_doc, &generated, config, policy)?;
     emit(&args.output, &source, args.check)?;
     if let Some(manifest) = &args.manifest {
         emit(manifest, &render_manifest(&generated), args.check)?;

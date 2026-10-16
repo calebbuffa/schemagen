@@ -51,7 +51,7 @@ fn the_person_module_is_lint_clean() {
 #[test]
 fn schema_defaults_apply_when_a_property_is_absent() {
     let config = config(
-        r#"{"classes":{"Settings":{"propertyDefaults":{
+        r#"{"schemas":{"Settings":{"propertyDefaults":{
         "name":"anon","scale":1,"tags":["a","b"],"on":true,"limit":7}}}}"#,
     );
     let schema = json!({"title": "Settings", "type": "object", "properties": {
@@ -256,7 +256,7 @@ fn boxed_slices_and_inline_vecs_come_with_their_helpers() {
         "slice": {"type": "array", "items": {"type": "number"}},
         "inline": {"type": "array", "items": {"type": "number"}}}});
     let config = config(
-        r#"{"classes":{"Holder":{"propertyTypes":{"slice":"Box<[f64]>","inline":"InlineVec<f64, 4>"}}}}"#,
+        r#"{"schemas":{"Holder":{"propertyTypes":{"slice":"Box<[f64]>","inline":"InlineVec<f64, 4>"}}}}"#,
     );
     let generated = generate_with("helpers.json", schema, &config, &DefaultPolicy);
     let source = render(&generated, &config, &DefaultPolicy);
@@ -326,7 +326,7 @@ fn extras_round_trip_and_empty_ones_are_omitted() {
 
 #[test]
 fn several_modules_share_one_copy_of_the_helpers() {
-    let config = config(r#"{"classes":{"Holder":{"propertyTypes":{"items":"InlineVec<u8, 4>"}}}}"#);
+    let config = config(r#"{"schemas":{"Holder":{"propertyTypes":{"items":"InlineVec<u8, 4>"}}}}"#);
     let schema = |title: &str| {
         json!({"title": title, "type": "object", "properties": {
             "items": {"type": "array", "items": {"type": "integer", "minimum": 0}}}})
@@ -374,7 +374,7 @@ fn several_modules_share_one_copy_of_the_helpers() {
 
 #[test]
 fn a_default_that_does_not_fit_fails_rendering_instead_of_panicking() {
-    let config = config(r#"{"classes":{"Holder":{"propertyDefaults":{"n":300}}}}"#);
+    let config = config(r#"{"schemas":{"Holder":{"propertyDefaults":{"n":300}}}}"#);
     let schema = json!({"title": "Holder", "type": "object", "properties": {
         "n": {"type": "integer", "minimum": 0, "maximum": 255}}});
     let generated = generate_with("bad-default.json", schema, &config, &DefaultPolicy);

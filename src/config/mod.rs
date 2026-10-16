@@ -23,7 +23,7 @@
 //! {
 //!   "typeNaming": "title",
 //!   "imports": ["crate::VertexAttribute"],
-//!   "classes": {
+//!   "schemas": {
 //!     "Mesh Primitive": {
 //!       "overrideName": "Primitive",
 //!       "propertyTypes": { "attributes": "SortedMap<VertexAttribute, u32>" },
@@ -46,14 +46,19 @@
 //! }
 //! ```
 //!
-//! Class keys are schema titles. They match exactly first, then ignoring
-//! ASCII case, so `"mesh"` finds a schema titled `Mesh` unless a `"Mesh"` key
-//! exists.
+//! Keys of `schemas` are schema titles and match exactly: `"mesh"` does not
+//! find a schema titled `Mesh`.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Deserialize;
+
+mod builder;
+
+pub use builder::{
+    ConfigBuilder, CustomEnumBuilder, ExtraFieldBuilder, IntoRustType, SchemaBuilder,
+};
 
 use crate::error::{Error, Result};
 use crate::model::RustType;
@@ -83,9 +88,9 @@ pub struct Config {
     #[serde(default)]
     pub imports: Vec<String>,
 
-    /// Per-class overrides keyed by the schema `title`.
+    /// Per-schema overrides keyed by the schema `title`.
     #[serde(default)]
-    pub classes: BTreeMap<String, ClassConfig>,
+    pub schemas: BTreeMap<String, SchemaConfig>,
 
     /// Rust types for properties, keyed by `"OwnerType.property"` or by
     /// `"*.property"` to match the property on every type. Consulted after the
@@ -171,18 +176,14 @@ impl Config {
             .map_err(|error| Error::config(format!("{}: {error}", path.display())))
     }
 
-    /// Finds the class configured for a schema titled `title`: an exact match,
-    /// else one that differs only in ASCII case. Returns the matching key too,
+    /// Finds the overrides configured for a schema titled `title`. Matching is
+    /// exact: titles that differ only in case are different schemas, and a
+    /// fuzzy match would rename one silently. Returns the matching key too,
     /// so callers can track which entries are used.
-    pub fn class(&self, title: &str) -> Option<(&str, &ClassConfig)> {
-        self.classes
+    pub fn schema(&self, title: &str) -> Option<(&str, &SchemaConfig)> {
+        self.schemas
             .get_key_value(title)
-            .or_else(|| {
-                self.classes
-                    .iter()
-                    .find(|(key, _)| key.eq_ignore_ascii_case(title))
-            })
-            .map(|(key, class)| (key.as_str(), class))
+            .map(|(key, schema)| (key.as_str(), schema))
     }
 
     /// Checks the entries that deserialization alone cannot.
@@ -215,8 +216,8 @@ impl Config {
                 )));
             }
         }
-        for (title, class) in &self.classes {
-            class.validate(title)?;
+        for (title, schema) in &self.schemas {
+            schema.validate(title)?;
         }
         for (name, custom) in &self.custom_types {
             custom.validate(name)?;
@@ -225,15 +226,15 @@ impl Config {
     }
 }
 
-/// Overrides for one schema, keyed by its title in [`Config::classes`].
+/// Overrides for one schema, keyed by its title in [`Config::schemas`].
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ClassConfig {
+pub struct SchemaConfig {
     /// The Rust type name to use instead of the derived one.
     #[serde(default)]
     pub override_name: Option<String>,
 
-    /// When true this schema generates no type: it is a base class whose
+    /// When true this schema generates no type: it is a base schema whose
     /// properties are inlined, or a type provided elsewhere. References to it
     /// become `replaceWith` when set, otherwise `serde_json::Value`.
     #[serde(default)]
@@ -273,7 +274,7 @@ pub struct ClassConfig {
     pub extra_fields: Vec<ExtraFieldConfig>,
 }
 
-impl ClassConfig {
+impl SchemaConfig {
     /// Whether the schema generates no type.
     pub fn is_skipped(&self) -> bool {
         self.skip || self.replace_with.is_some()
@@ -282,7 +283,7 @@ impl ClassConfig {
     fn validate(&self, title: &str) -> Result<()> {
         if self.skip && self.override_name.is_some() && self.replace_with.is_none() {
             return Err(Error::config(format!(
-                "classes.{title}: `skip` with `overrideName` names a type that is never \
+                "schemas.{title}: `skip` with `overrideName` names a type that is never \
                  generated; use `replaceWith` to say what references become"
             )));
         }
@@ -292,20 +293,20 @@ impl ClassConfig {
                 || !self.extra_fields.is_empty())
         {
             return Err(Error::config(format!(
-                "classes.{title}: a skipped class has no properties to configure"
+                "schemas.{title}: a skipped schema has no properties to configure"
             )));
         }
         for field in &self.property_skip {
             if self.property_types.contains_key(field) {
                 return Err(Error::config(format!(
-                    "classes.{title}: `{field}` is both skipped and given a type"
+                    "schemas.{title}: `{field}` is both skipped and given a type"
                 )));
             }
         }
         for field in &self.extra_fields {
             if syn::parse_str::<syn::Ident>(&field.name).is_err() {
                 return Err(Error::config(format!(
-                    "classes.{title}: extra field `{}` is not a valid identifier",
+                    "schemas.{title}: extra field `{}` is not a valid identifier",
                     field.name
                 )));
             }
@@ -431,17 +432,18 @@ mod tests {
 
     #[test]
     fn a_config_of_pure_exceptions_is_valid() {
-        assert!(config(r#"{"classes": {"Tile": {"skip": true}}}"#).is_ok());
+        assert!(config(r#"{"schemas": {"Tile": {"skip": true}}}"#).is_ok());
         assert!(config("{}").is_ok());
     }
 
     #[test]
     fn unknown_keys_are_rejected_at_every_level() {
         for json in [
-            r#"{"classez": {}}"#,
-            r#"{"classes": {"Tile": {"propertyOverrides": {}}}}"#,
+            r#"{"schemaz": {}}"#,
+            r#"{"classes": {}}"#,
+            r#"{"schemas": {"Tile": {"propertyOverrides": {}}}}"#,
             r#"{"customTypes": {"A": {"kind": "enum", "variants": ["x"], "colour": 1}}}"#,
-            r#"{"classes": {"Tile": {"extraFields": [{"name": "a", "type": "u8", "rustType": "u8"}]}}}"#,
+            r#"{"schemas": {"Tile": {"extraFields": [{"name": "a", "type": "u8", "rustType": "u8"}]}}}"#,
         ] {
             let error = config(json).expect_err(json).to_string();
             assert!(error.contains("unknown field"), "{json}: {error}");
@@ -461,34 +463,34 @@ mod tests {
 
     #[test]
     fn invalid_rust_types_fail_at_load_time() {
-        let error = config(r#"{"classes": {"Tile": {"propertyTypes": {"a": "&str"}}}}"#)
+        let error = config(r#"{"schemas": {"Tile": {"propertyTypes": {"a": "&str"}}}}"#)
             .expect_err("a reference type is not modelled")
             .to_string();
         assert!(error.contains("&str"), "{error}");
     }
 
     #[test]
-    fn class_lookup_prefers_an_exact_match_then_ignores_case() {
-        let config = config(r#"{"classes": {"buffer": {}, "Buffer": {"skip": true}}}"#).unwrap();
-        assert_eq!(config.class("Buffer").unwrap().0, "Buffer");
-        assert_eq!(config.class("buffer").unwrap().0, "buffer");
-        assert_eq!(config.class("BUFFER").unwrap().0, "Buffer");
-        assert!(config.class("Mesh").is_none());
+    fn schema_lookup_is_exact() {
+        let config = config(r#"{"schemas": {"buffer": {}, "Buffer": {"skip": true}}}"#).unwrap();
+        assert_eq!(config.schema("Buffer").unwrap().0, "Buffer");
+        assert_eq!(config.schema("buffer").unwrap().0, "buffer");
+        assert!(config.schema("BUFFER").is_none());
+        assert!(config.schema("Mesh").is_none());
     }
 
     #[test]
     fn replace_with_implies_skip() {
-        let config = config(r#"{"classes": {"glTF Id": {"replaceWith": "u32"}}}"#).unwrap();
-        assert!(config.class("glTF Id").unwrap().1.is_skipped());
+        let config = config(r#"{"schemas": {"glTF Id": {"replaceWith": "u32"}}}"#).unwrap();
+        assert!(config.schema("glTF Id").unwrap().1.is_skipped());
     }
 
     #[test]
-    fn contradictory_class_entries_are_rejected() {
+    fn contradictory_schema_entries_are_rejected() {
         for json in [
-            r#"{"classes": {"A": {"skip": true, "overrideName": "B"}}}"#,
-            r#"{"classes": {"A": {"skip": true, "propertyTypes": {"x": "u8"}}}}"#,
-            r#"{"classes": {"A": {"propertySkip": ["x"], "propertyTypes": {"x": "u8"}}}}"#,
-            r#"{"classes": {"A": {"extraFields": [{"name": "not ident", "type": "u8"}]}}}"#,
+            r#"{"schemas": {"A": {"skip": true, "overrideName": "B"}}}"#,
+            r#"{"schemas": {"A": {"skip": true, "propertyTypes": {"x": "u8"}}}}"#,
+            r#"{"schemas": {"A": {"propertySkip": ["x"], "propertyTypes": {"x": "u8"}}}}"#,
+            r#"{"schemas": {"A": {"extraFields": [{"name": "not ident", "type": "u8"}]}}}"#,
         ] {
             assert!(config(json).is_err(), "{json}");
         }

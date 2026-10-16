@@ -75,7 +75,7 @@ fn transitive_references_are_discovered() {
 
 #[test]
 fn config_defaults_are_applied() {
-    let config = config(r#"{"classes":{"Address":{"propertyDefaults":{"city":"unknown"}}}}"#);
+    let config = config(r#"{"schemas":{"Address":{"propertyDefaults":{"city":"unknown"}}}}"#);
     let mut graph = Graph::new(FIXTURES);
     let root = graph.load("address.schema.json").unwrap();
     let (generated, _) = generate(&mut graph, &[root], &config, &DefaultPolicy).unwrap();
@@ -302,7 +302,7 @@ fn an_alias_equal_to_another_value_is_an_error() {
 
 #[test]
 fn property_required_overrides_the_schema() {
-    let config = config(r#"{"classes":{"Holder":{"propertyRequired":{"name":false}}}}"#);
+    let config = config(r#"{"schemas":{"Holder":{"propertyRequired":{"name":false}}}}"#);
     let schema = json!({"title": "Holder", "type": "object", "required": ["name"],
         "properties": {"name": {"type": "string"}}});
     let generated = generate_with("required.json", schema, &config, &DefaultPolicy);
@@ -316,24 +316,24 @@ fn field_types_resolve_by_owner_then_wildcard() {
     let schema = json!({"title": "Holder", "type": "object", "properties": {
         "a": {"type": "integer"}, "b": {"type": "integer"}, "c": {"type": "integer"}}});
     let config = config(
-        r#"{"fieldTypes":{"Holder.a":"u8","*.b":"i16"},"classes":{"Holder":{"propertyTypes":{"a":"u64"}}}}"#,
+        r#"{"fieldTypes":{"Holder.a":"u8","*.b":"i16"},"schemas":{"Holder":{"propertyTypes":{"a":"u64"}}}}"#,
     );
     let generated = generate_with("types.json", schema, &config, &DefaultPolicy);
     let holder = &generated.definitions[0];
-    // A class's own `propertyTypes` outranks the shared `fieldTypes` table.
+    // A schema's own `propertyTypes` outranks the shared `fieldTypes` table.
     assert_eq!(field(holder, "a").ty, optional(RustType::U64));
     assert_eq!(field(holder, "b").ty, optional(RustType::I16));
 }
 
 #[test]
-fn skipped_classes_become_value_or_their_replacement() {
+fn skipped_schemas_become_value_or_their_replacement() {
     let schema = json!({"title": "Root", "type": "object", "properties": {
         "skipped": {"$ref": "#/$defs/Skipped"}, "swapped": {"$ref": "#/$defs/Swapped"}},
         "$defs": {
             "Skipped": {"title": "Skipped", "type": "object", "properties": {"x": {"type": "string"}}},
             "Swapped": {"title": "Swapped", "type": "object", "properties": {"x": {"type": "string"}}}}});
     let config = config(
-        r#"{"classes":{"Skipped":{"skip":true},"Swapped":{"skip":true,"replaceWith":"u32"}}}"#,
+        r#"{"schemas":{"Skipped":{"skip":true},"Swapped":{"skip":true,"replaceWith":"u32"}}}"#,
     );
     let generated = generate_with("skip.json", schema, &config, &DefaultPolicy);
     let root = generated
@@ -364,9 +364,23 @@ fn two_schemas_with_one_name_are_an_error_with_a_remedy() {
 }
 
 #[test]
+fn a_root_union_is_one_type_not_a_duplicate_of_itself() {
+    let schema = json!({"title": "Expression", "oneOf": [
+        {"type": "boolean"},
+        {"type": "string"}]});
+    let generated = generate_default("root-union.json", schema);
+    let names: Vec<_> = generated
+        .definitions
+        .iter()
+        .flat_map(|d| d.unions.iter().map(|u| u.name.as_str()))
+        .collect();
+    assert_eq!(names, ["Expression"]);
+}
+
+#[test]
 fn unused_config_entries_are_reported() {
     let config =
-        config(r#"{"classes":{"Nothing":{"skip":true}},"fieldTypes":{"Holder.gone":"u8"}}"#);
+        config(r#"{"schemas":{"Nothing":{"skip":true}},"fieldTypes":{"Holder.gone":"u8"}}"#);
     let mut graph = Graph::new(FIXTURES);
     let root = graph.insert_document(
         "stale.json",
@@ -382,8 +396,8 @@ fn unused_config_entries_are_reported() {
 }
 
 #[test]
-fn stale_property_keys_in_a_class_warn() {
-    let config = config(r#"{"classes":{"Holder":{"propertyTypes":{"missing":"u8"}}}}"#);
+fn stale_property_keys_in_a_schema_warn() {
+    let config = config(r#"{"schemas":{"Holder":{"propertyTypes":{"missing":"u8"}}}}"#);
     let mut graph = Graph::new(FIXTURES);
     let root = graph.insert_document(
         "stale-property.json",
@@ -428,7 +442,7 @@ fn removed_settings_in_config_point_at_their_replacement() {
 #[test]
 fn unknown_config_keys_are_rejected() {
     assert!(Config::from_json_str(r#"{"surprise":1}"#).is_err());
-    assert!(Config::from_json_str(r#"{"classes":{"A":{"surprise":1}}}"#).is_err());
+    assert!(Config::from_json_str(r#"{"schemas":{"A":{"surprise":1}}}"#).is_err());
 }
 
 #[test]

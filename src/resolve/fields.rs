@@ -8,7 +8,7 @@ use super::Resolver;
 use super::enums::{array_item_enum, finite_values};
 use super::names::field_name;
 use super::types::collection_of;
-use crate::config::ClassConfig;
+use crate::config::SchemaConfig;
 use crate::graph::SchemaId;
 use crate::ir::SchemaNode;
 use crate::model::{EnumDef, FieldDef, RustType, UnionDef};
@@ -54,20 +54,20 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         }
 
         let label = self.label(node);
-        let class = self.class(&label).unwrap_or_default();
-        self.check_class_properties(node, &label, &class, &properties);
+        let overrides = self.schema_config(&label).unwrap_or_default();
+        self.check_configured_properties(node, &label, &overrides, &properties);
 
         let extensible = self.config.extensible;
         properties.retain(|name, schema| {
             let reserved = extensible && matches!(name.as_str(), "extensions" | "extras");
             !(reserved
-                || class.property_skip.contains(name)
+                || overrides.property_skip.contains(name)
                 || policy.skip_field(node, name, schema))
         });
 
         let mut fields: Vec<FieldDef> = Vec::new();
         for (json_name, schema) in &properties {
-            let is_required = class
+            let is_required = overrides
                 .property_required
                 .get(json_name)
                 .copied()
@@ -78,10 +78,10 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
                 .metadata
                 .default
                 .clone()
-                .or_else(|| class.property_defaults.get(json_name).cloned());
+                .or_else(|| overrides.property_defaults.get(json_name).cloned());
 
             let ty = if let Some(chosen) =
-                self.field_type_override(owner, node, json_name, schema, &class)
+                self.field_type_override(owner, node, json_name, schema, &overrides)
             {
                 chosen
             } else if let Some(finite) = finite_values(schema, settings.infer_open_enums) {
@@ -129,7 +129,7 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
                 default,
                 skip_serializing_if: policy
                     .skip_serializing_if(node, json_name, schema)
-                    .or_else(|| class.property_skip_if.get(json_name).cloned()),
+                    .or_else(|| overrides.property_skip_if.get(json_name).cloned()),
                 flatten: false,
             });
         }
@@ -169,12 +169,12 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         node: &SchemaNode,
         json_name: &str,
         schema: &SchemaNode,
-        class: &ClassConfig,
+        overrides: &SchemaConfig,
     ) -> Option<RustType> {
         if let Some(chosen) = self.policy.field_type(node, json_name, schema) {
             return Some(chosen);
         }
-        if let Some(chosen) = class.property_types.get(json_name) {
+        if let Some(chosen) = overrides.property_types.get(json_name) {
             return Some(chosen.clone());
         }
         for key in [format!("{owner}.{json_name}"), format!("*.{json_name}")] {
@@ -186,22 +186,22 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         None
     }
 
-    /// Reports class entries that name a property the schema does not have,
-    /// which is always a typo or a leftover.
-    fn check_class_properties(
+    /// Reports configured properties the schema does not have, which is
+    /// always a typo or a leftover.
+    fn check_configured_properties(
         &mut self,
         node: &SchemaNode,
         label: &str,
-        class: &ClassConfig,
+        overrides: &SchemaConfig,
         properties: &Properties,
     ) {
-        let configured = class
+        let configured = overrides
             .property_types
             .keys()
-            .chain(class.property_defaults.keys())
-            .chain(class.property_skip_if.keys())
-            .chain(class.property_required.keys())
-            .chain(class.property_skip.iter());
+            .chain(overrides.property_defaults.keys())
+            .chain(overrides.property_skip_if.keys())
+            .chain(overrides.property_required.keys())
+            .chain(overrides.property_skip.iter());
         let mut stale: Vec<&String> = configured
             .filter(|name| !properties.contains_key(*name))
             .collect();
