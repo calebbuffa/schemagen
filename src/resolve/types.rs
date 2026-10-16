@@ -61,6 +61,9 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         };
         if !union.is_empty() {
             if node.metadata.title.is_some() {
+                if let Some(replacement) = self.configured_replacement(node) {
+                    return replacement;
+                }
                 let name = self.type_name(node);
                 self.discover(node);
                 return RustType::Named(name);
@@ -111,18 +114,23 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
         }
     }
 
+    /// The type a titled schema is configured to become instead of a generated
+    /// one: its `replaceWith`, or `Value` when it is skipped.
+    fn configured_replacement(&mut self, node: &SchemaNode) -> Option<RustType> {
+        let label = self.label(node);
+        let schema = self.schema_config(&label)?;
+        if let Some(replacement) = schema.replace_with {
+            return Some(replacement);
+        }
+        schema.skip.then_some(RustType::Value)
+    }
+
     /// The type a reference to `resolved` becomes: a configured replacement,
     /// `Value` when the schema is skipped, the generated type otherwise, or
     /// the schema's own structure when it is an untitled non-object.
     pub(super) fn reference_type(&mut self, target: &SchemaId, resolved: &SchemaNode) -> RustType {
-        let label = self.label(resolved);
-        if let Some(schema) = self.schema_config(&label) {
-            if let Some(replacement) = &schema.replace_with {
-                return replacement.clone();
-            }
-            if schema.skip {
-                return RustType::Value;
-            }
+        if let Some(replacement) = self.configured_replacement(resolved) {
+            return replacement;
         }
         if resolved.metadata.title.is_none() && resolved.object.is_none() {
             return self.type_for(target, resolved);
@@ -168,6 +176,9 @@ impl<P: GenerationPolicy + ?Sized> Resolver<'_, P> {
             return self.map_type(source, node);
         }
         if node.metadata.title.is_some() {
+            if let Some(replacement) = self.configured_replacement(node) {
+                return replacement;
+            }
             let name = self.type_name(node);
             self.discover(node);
             return RustType::Named(name);

@@ -347,6 +347,40 @@ fn skipped_schemas_become_value_or_their_replacement() {
 }
 
 #[test]
+fn skip_and_replace_with_apply_to_inline_titled_schemas() {
+    let schema = json!({"title": "Root", "type": "object", "properties": {
+        "objects": {"type": "array", "items": {"title": "Inline Object", "type": "object",
+            "properties": {"x": {"type": "string"}}}},
+        "unions": {"type": "array", "items": {"title": "Inline Union",
+            "oneOf": [{"type": "string"}, {"type": "object", "properties": {"y": {"type": "string"}}}]}},
+        "skipped": {"title": "Inline Skipped", "type": "object", "properties": {"z": {"type": "string"}}}}});
+    let config = config(
+        r#"{"schemas":{"Inline Object":{"replaceWith":"u32"},"Inline Union":{"replaceWith":"u64"},"Inline Skipped":{"skip":true}}}"#,
+    );
+    let generated = generate_with("inline.json", schema, &config, &DefaultPolicy);
+    let root = generated
+        .definitions
+        .iter()
+        .find(|d| d.name == "Root")
+        .unwrap();
+    assert_eq!(
+        field(root, "objects").ty,
+        RustType::Vec(Box::new(RustType::U32))
+    );
+    assert_eq!(
+        field(root, "unions").ty,
+        RustType::Vec(Box::new(RustType::U64))
+    );
+    assert_eq!(field(root, "skipped").ty, optional(RustType::Value));
+    assert!(
+        generated
+            .definitions
+            .iter()
+            .all(|d| !d.name.starts_with("Inline"))
+    );
+}
+
+#[test]
 fn two_schemas_with_one_name_are_an_error_with_a_remedy() {
     let schema = json!({"title": "Root", "type": "object", "properties": {
         "a": {"$ref": "#/$defs/A"}, "b": {"$ref": "#/$defs/B"}},
