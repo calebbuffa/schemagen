@@ -42,9 +42,9 @@ Top level: `typeNaming` (`title` | `fileStem`), `imports` (`use` paths such as
   `target`, `default`, `doc`.
 - `enumNames`, `enumAliases`: rename inferred enums / add serde aliases.
 
-Precedence for field types: policy → class `propertyTypes` → `fieldTypes`
-(`Owner.prop`, then `*.prop`) → inference. Required: class
-`propertyRequired` → policy → schema `required`.
+Precedence for field types: policy -> class `propertyTypes` -> `fieldTypes`
+(`Owner.prop`, then `*.prop`) -> inference. Required: class
+`propertyRequired` -> policy -> schema `required`.
 
 Representation choices (numbers, strings, maps, open enums) are
 `GenerationSettings` on the policy, not config.
@@ -58,15 +58,6 @@ cannot be data.
 
 ## Generated runtime helpers
 
-`EmptyCollection`, `BoxedSlice`, `SortedMap`, `InlineVec` are real Rust
-sources (`src/runtime`), embedded with `include_str!` and emitted only when
+`EmptyCollection`, `BoxedSlice`, `SortedMap`, `InlineVec` are Rust
+sources (`src/runtime`) embedded with `include_str!` and emitted only when
 used. Multi-module output (`render_modules`) emits them once.
-
-## Migrating from 0.1
-
-- Config: `propertyOverrides` → `propertyTypes`, `rustType` → `type`;
-  `extensionTrait`/`propertySkipIf` rules moved to policy/class config.
-- Number/string/map/open-enum settings moved from config to policy settings.
-- `--output` is a file; custom numeric enums are `i64`-based (no `serde_repr`);
-  custom aliases are `pub type`; closed enums derive `Hash`; extensible
-  `extensions`/`extras` skip serializing when empty.
