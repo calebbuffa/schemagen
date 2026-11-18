@@ -55,7 +55,11 @@ pub(crate) fn default_expression(value: &Value, ty: &RustType) -> Result<TokenSt
             let items = elements(value, inner, ty)?;
             Ok(quote!(InlineVec::from_vec(vec![#(#items),*])))
         }
-        RustType::Map(_, _) | RustType::SortedMap(_, _) | RustType::Named(_) | RustType::Value => {
+        RustType::Map(..)
+        | RustType::BTreeMap(..)
+        | RustType::SortedMap(..)
+        | RustType::Named(_)
+        | RustType::Value => {
             let json = serde_json::to_string(value).map_err(|e| Error::render(e.to_string()))?;
             Ok(quote!(
                 serde_json::from_str(#json).expect("a schema default must match its type")

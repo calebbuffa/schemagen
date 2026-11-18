@@ -231,20 +231,71 @@ fn an_unsuffixed_sorted_map_behaves_like_a_map() {
     let policy = SettingsPolicy::new(TypeSettings::compact().with_string(StringRepr::Owned));
     let generated = generate_with("sorted-map.json", schema, &Config::default(), &policy);
     let source = render(&generated, &Config::default(), &policy);
-    assert!(source.contains("SortedMap") && !source.contains("HashMap<String"));
+    assert!(source.contains("SortedMap::is_empty") && !source.contains("HashMap<String"));
+    assert!(!source.contains("EmptyCollection"));
     run_generated_tests(
         "sorted-map-test",
         &source,
         r##"
 #[test]
 fn keys_are_ordered_and_it_serializes_as_an_object() {
-    let parsed: Holder = serde_json::from_str(r#"{"attributes": {"b": 2, "a": 1, "c": 3}}"#).unwrap();
+    let parsed: Holder = serde_json::from_str(r#"{"attributes": {"b": 2, "a": 1, "c": 3, "a": 4}}"#).unwrap();
     let attributes = &parsed.attributes;
     assert_eq!(attributes.get("a"), Some(&1));
     assert_eq!(attributes.get("missing"), None);
     let keys: Vec<&String> = attributes.keys().collect();
     assert_eq!(keys, ["a", "b", "c"]);
     assert!(serde_json::to_string(&parsed).unwrap().contains(r#""a":1"#));
+}
+"##,
+    );
+}
+
+#[test]
+fn standard_collections_preserve_required_defaults_and_optional_nulls() {
+    let schema = json!({"title": "Holder", "type": "object", "required": ["required"],
+    "properties": {
+        "required": {"type": "array", "items": {"type": "string"}},
+        "values": {"type": "array", "items": {"type": "string"}},
+        "defaults": {"type": "array", "items": {"type": "string"}},
+        "ordered": {"type": "object", "additionalProperties": {"type": "string"}},
+        "unordered": {"type": "object", "additionalProperties": {"type": "string"}}
+    }});
+    let config = config(
+        r#"{"schemas":{"Holder":{
+        "propertyTypes":{"unordered":"std::collections::HashMap<String, String>"},
+        "propertyDefaults":{"defaults":["first"]}
+    }}}"#,
+    );
+    let policy =
+        SettingsPolicy::new(TypeSettings::default().with_map(schemagen::MapRepr::BTreeMap));
+    let generated = generate_with("collections.json", schema, &config, &policy);
+    let source = render(&generated, &config, &policy);
+    assert!(!source.contains("EmptyCollection"));
+    run_generated_tests(
+        "standard-collections",
+        &source,
+        r##"
+#[test]
+fn wire_behavior() {
+    assert!(serde_json::from_str::<Holder>("{}").is_err());
+    assert!(serde_json::from_str::<Holder>(r#"{"required":null}"#).is_err());
+    for json in [
+        r#"{"required":[]}"#,
+        r#"{"required":[],"values":null,"ordered":null,"unordered":null}"#,
+        r#"{"required":[],"values":[],"ordered":{},"unordered":{}}"#,
+    ] {
+        let parsed: Holder = serde_json::from_str(json).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), serde_json::json!({
+            "required": [], "defaults": ["first"]
+        }));
+    }
+    let mut parsed: Holder = serde_json::from_str(
+        r#"{"required":[],"defaults":[],"ordered":{"z":"old","a":"value","z":"new"}}"#
+    ).unwrap();
+    assert_eq!(parsed.ordered.insert("z".to_owned(), "final".to_owned()).as_deref(), Some("new"));
+    assert_eq!(serde_json::to_string(&parsed.ordered).unwrap(), r#"{"a":"value","z":"final"}"#);
+    assert_eq!(serde_json::to_value(parsed).unwrap()["defaults"], serde_json::json!([]));
 }
 "##,
     );
@@ -297,7 +348,7 @@ fn helpers_are_emitted_only_when_used() {
         "InlineVec",
         "SortedMap",
         "deserialize_boxed_slice",
-        "is_empty_collection",
+        "deserialize_null_default",
     ] {
         assert!(!source.contains(helper), "{helper} should be absent");
     }

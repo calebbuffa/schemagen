@@ -183,12 +183,6 @@ impl<T: Serialize, const N: usize> Serialize for InlineVec<T, N> {
     }
 }
 
-impl<T, const N: usize> EmptyCollection for InlineVec<T, N> {
-    fn is_empty_collection(&self) -> bool {
-        self.is_empty()
-    }
-}
-
 impl<'de, T: Deserialize<'de>, const N: usize> Deserialize<'de> for InlineVec<T, N> {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         struct Visitor<T, const N: usize>(std::marker::PhantomData<T>);

@@ -84,12 +84,6 @@ impl<K, V> SortedMap<K, V> {
     }
 }
 
-impl<K, V> EmptyCollection for SortedMap<K, V> {
-    fn is_empty_collection(&self) -> bool {
-        self.is_empty()
-    }
-}
-
 impl<'a, K, V> IntoIterator for &'a SortedMap<K, V> {
     type Item = (&'a K, &'a V);
     type IntoIter = std::iter::Map<std::slice::Iter<'a, (K, V)>, fn(&'a (K, V)) -> (&'a K, &'a V)>;

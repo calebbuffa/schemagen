@@ -105,11 +105,17 @@ fn plan(owner: &str, field: &FieldDef) -> FieldPlan {
             None
         } else if matches!(field.ty, RustType::Option(_)) {
             Some("Option::is_none".to_owned())
-        } else if field.ty.omits_when_empty() {
-            helpers.insert(Helper::EmptyCollection);
-            Some("is_empty_collection".to_owned())
         } else {
-            None
+            match field.ty {
+                RustType::Vec(_) => Some("Vec::is_empty"),
+                RustType::BoxedSlice(_) => Some("<[_]>::is_empty"),
+                RustType::Map(..) => Some("std::collections::HashMap::is_empty"),
+                RustType::BTreeMap(..) => Some("std::collections::BTreeMap::is_empty"),
+                RustType::SortedMap(..) => Some("SortedMap::is_empty"),
+                RustType::InlineVec(..) => Some("InlineVec::is_empty"),
+                _ => None,
+            }
+            .map(str::to_owned)
         }
     });
 
@@ -120,7 +126,7 @@ fn plan(owner: &str, field: &FieldDef) -> FieldPlan {
         helpers.insert(Helper::BoxedSlice);
         Some("deserialize_boxed_slice")
     } else if optional_without_default && field.ty.omits_when_empty() {
-        helpers.insert(Helper::EmptyCollection);
+        helpers.insert(Helper::NullDefault);
         Some("deserialize_null_default")
     } else {
         None
@@ -339,9 +345,9 @@ mod tests {
             false,
         );
         let planned = plan("Thing", &list);
-        assert!(planned.helpers.contains(&Helper::EmptyCollection));
+        assert!(planned.helpers.contains(&Helper::NullDefault));
         let rendered = planned.attribute().unwrap().to_string();
-        assert!(rendered.contains("is_empty_collection"), "{rendered}");
+        assert!(rendered.contains("Vec::is_empty"), "{rendered}");
         assert!(rendered.contains("deserialize_null_default"), "{rendered}");
     }
 

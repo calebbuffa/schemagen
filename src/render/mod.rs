@@ -165,7 +165,7 @@ fn render_body(module: &Module<'_>) -> Result<Body> {
 fn assemble(file_doc: &str, helpers: &BTreeSet<Helper>, body: TokenStream) -> Result<String> {
     let attributes = module_attributes();
     let file_doc = string_literal(file_doc);
-    let helpers = support::render_helpers(&support::with_dependencies(helpers.iter().copied()))?;
+    let helpers = support::render_helpers(helpers)?;
     let tokens = quote!(
         #![doc = #file_doc]
         #attributes

@@ -60,6 +60,8 @@ pub enum RustType {
     Array(Box<RustType>, usize),
     /// A `std::collections::HashMap`.
     Map(Box<RustType>, Box<RustType>),
+    /// A `std::collections::BTreeMap`.
+    BTreeMap(Box<RustType>, Box<RustType>),
     /// A sorted `Box<[(K, V)]>` with map-like accessors.
     ///
     /// Schema objects with homogeneous values are usually small and read-only
@@ -91,6 +93,7 @@ impl RustType {
                 | RustType::InlineVec(_, _)
                 | RustType::Array(_, _)
                 | RustType::Map(_, _)
+                | RustType::BTreeMap(_, _)
                 | RustType::SortedMap(_, _)
         )
     }
@@ -111,7 +114,9 @@ impl RustType {
             | RustType::BoxedSlice(inner)
             | RustType::InlineVec(inner, _)
             | RustType::Array(inner, _) => inner.walk(visit),
-            RustType::Map(key, value) | RustType::SortedMap(key, value) => {
+            RustType::Map(key, value)
+            | RustType::BTreeMap(key, value)
+            | RustType::SortedMap(key, value) => {
                 key.walk(visit);
                 value.walk(visit);
             }
@@ -134,7 +139,9 @@ impl RustType {
             | RustType::BoxedSlice(inner)
             | RustType::InlineVec(inner, _)
             | RustType::Array(inner, _) => inner.rename_named(renames),
-            RustType::Map(key, value) | RustType::SortedMap(key, value) => {
+            RustType::Map(key, value)
+            | RustType::BTreeMap(key, value)
+            | RustType::SortedMap(key, value) => {
                 key.rename_named(renames);
                 value.rename_named(renames);
             }
@@ -198,6 +205,7 @@ impl fmt::Display for RustType {
             Self::InlineVec(inner, capacity) => write!(f, "InlineVec<{inner}, {capacity}>"),
             Self::Array(inner, len) => write!(f, "[{inner}; {len}]"),
             Self::Map(key, value) => write!(f, "std::collections::HashMap<{key}, {value}>"),
+            Self::BTreeMap(key, value) => write!(f, "std::collections::BTreeMap<{key}, {value}>"),
             Self::SortedMap(key, value) => write!(f, "SortedMap<{key}, {value}>"),
             Self::Named(name) => f.write_str(name),
         }
@@ -235,6 +243,7 @@ impl ToTokens for RustType {
                 quote!([#inner; #len])
             }
             Self::Map(key, value) => quote!(std::collections::HashMap<#key, #value>),
+            Self::BTreeMap(key, value) => quote!(std::collections::BTreeMap<#key, #value>),
             Self::SortedMap(key, value) => quote!(SortedMap<#key, #value>),
             Self::Named(name) => match syn::parse_str::<syn::Path>(name) {
                 Ok(path) => path.into_token_stream(),
@@ -427,6 +436,19 @@ fn from_path(path: &syn::Path, input: &str) -> Result<RustType, Error> {
             arity(&args, 2)?;
             let mut args = args.into_iter();
             Ok(RustType::SortedMap(
+                boxed(args.next().unwrap()),
+                boxed(args.next().unwrap()),
+            ))
+        }
+        "BTreeMap"
+            if in_std(&["collections"])
+                || in_std(&["collections", "btree_map"])
+                || prefix == ["collections"] =>
+        {
+            let args = args?;
+            arity(&args, 2)?;
+            let mut args = args.into_iter();
+            Ok(RustType::BTreeMap(
                 boxed(args.next().unwrap()),
                 boxed(args.next().unwrap()),
             ))

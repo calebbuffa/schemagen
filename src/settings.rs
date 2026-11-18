@@ -102,6 +102,8 @@ pub enum MapRepr {
     /// A `std::collections::HashMap`.
     #[default]
     HashMap,
+    /// A `std::collections::BTreeMap` with key-ordered iteration.
+    BTreeMap,
     /// A sorted `Box<[(K, V)]>`, substantially smaller both inline and on the
     /// heap for the small, read-mostly maps that schemas typically describe.
     /// Lookups become a binary search rather than a hash.
@@ -115,6 +117,7 @@ impl MapRepr {
     pub fn rust_type(self, key: RustType, value: RustType) -> RustType {
         match self {
             MapRepr::HashMap => RustType::Map(Box::new(key), Box::new(value)),
+            MapRepr::BTreeMap => RustType::BTreeMap(Box::new(key), Box::new(value)),
             MapRepr::SortedSlice => RustType::SortedMap(Box::new(key), Box::new(value)),
         }
     }

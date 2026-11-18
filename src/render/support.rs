@@ -13,12 +13,11 @@ use quote::ToTokens;
 
 use crate::error::Result;
 
-/// One embeddable helper. Variants are in emission order, so a helper
-/// always follows the ones it depends on.
+/// One embeddable helper, in emission order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
-    /// `EmptyCollection`, `is_empty_collection` and `deserialize_null_default`.
-    EmptyCollection,
+    /// `deserialize_null_default`.
+    NullDefault,
     /// `deserialize_boxed_slice`.
     BoxedSlice,
     /// `SortedMap`.
@@ -30,18 +29,10 @@ pub(crate) enum Helper {
 impl Helper {
     fn source(self) -> &'static str {
         match self {
-            Helper::EmptyCollection => include_str!("../runtime/empty_collection.rs"),
+            Helper::NullDefault => include_str!("../runtime/null_default.rs"),
             Helper::BoxedSlice => include_str!("../runtime/boxed_slice.rs"),
             Helper::SortedMap => include_str!("../runtime/sorted_map.rs"),
             Helper::InlineVec => include_str!("../runtime/inline_vec.rs"),
-        }
-    }
-
-    /// The helpers this one's source refers to.
-    fn requires(self) -> &'static [Helper] {
-        match self {
-            Helper::SortedMap | Helper::InlineVec => &[Helper::EmptyCollection],
-            Helper::EmptyCollection | Helper::BoxedSlice => &[],
         }
     }
 
@@ -49,18 +40,6 @@ impl Helper {
         let file = syn::parse_file(self.source())?;
         Ok(file.items.iter().map(ToTokens::to_token_stream).collect())
     }
-}
-
-/// Adds the helpers `needed` depends on, transitively.
-pub(crate) fn with_dependencies(needed: impl IntoIterator<Item = Helper>) -> BTreeSet<Helper> {
-    let mut all = BTreeSet::new();
-    let mut pending: Vec<Helper> = needed.into_iter().collect();
-    while let Some(helper) = pending.pop() {
-        if all.insert(helper) {
-            pending.extend_from_slice(helper.requires());
-        }
-    }
-    all
 }
 
 /// The source of `helpers`, in emission order.
@@ -77,25 +56,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dependencies_are_pulled_in_and_ordered() {
-        let helpers = with_dependencies([Helper::InlineVec]);
-        assert_eq!(
-            helpers.into_iter().collect::<Vec<_>>(),
-            [Helper::EmptyCollection, Helper::InlineVec]
-        );
-        assert!(with_dependencies([]).is_empty());
-    }
-
-    #[test]
-    fn every_helper_is_valid_rust_on_its_own_with_its_dependencies() {
+    fn every_helper_is_valid_rust_on_its_own() {
         for helper in [
-            Helper::EmptyCollection,
+            Helper::NullDefault,
             Helper::BoxedSlice,
             Helper::SortedMap,
             Helper::InlineVec,
         ] {
-            let helpers = with_dependencies([helper]);
-            render_helpers(&helpers).unwrap_or_else(|e| panic!("{helper:?}: {e}"));
+            render_helpers(&BTreeSet::from([helper])).unwrap_or_else(|e| panic!("{helper:?}: {e}"));
         }
     }
 }
@@ -109,7 +77,7 @@ mod runtime_tests {
 
     use serde::{Deserialize, Serialize};
 
-    include!("../runtime/empty_collection.rs");
+    include!("../runtime/null_default.rs");
     include!("../runtime/boxed_slice.rs");
     include!("../runtime/sorted_map.rs");
     include!("../runtime/inline_vec.rs");
@@ -279,7 +247,7 @@ mod runtime_tests {
     fn sorted_map_round_trips_as_a_json_object() {
         let map: SortedMap<String, u32> = serde_json::from_str(r#"{"z": 1, "a": 2}"#).unwrap();
         assert_eq!(serde_json::to_string(&map).unwrap(), r#"{"a":2,"z":1}"#);
-        assert!(SortedMap::<String, u32>::default().is_empty_collection());
+        assert!(SortedMap::<String, u32>::default().is_empty());
     }
 
     #[test]
@@ -291,6 +259,5 @@ mod runtime_tests {
         }
         let holder: Holder = serde_json::from_str(r#"{"values": null}"#).unwrap();
         assert!(holder.values.is_empty());
-        assert!(is_empty_collection(&holder.values));
     }
 }
